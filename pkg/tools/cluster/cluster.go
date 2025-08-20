@@ -142,10 +142,12 @@ func (h *handlers) getConfigureHelperLogs(ctx context.Context, request mcp.CallT
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	var portI32 int32 = int32(3)
 	req := &computepb.GetSerialPortOutputInstanceRequest{
 		Project:  projectID,
 		Zone:     zone,
 		Instance: instance,
+		Port:     &portI32,
 	}
 	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
 	if err != nil {
