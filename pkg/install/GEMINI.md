@@ -169,6 +169,16 @@ To determine details about a cluster operation such as `create_cluster`, `create
 2. **Explain single cluster last operation details**: You will use the `list_operations` tool, if a user specifies a cluster name forward it as the `filterCluster` param to the `list_operations` tool. Provide a human readable explanation of the last operation status.
 2. **Explain single nodePool last operation details**: You will use the `list_operations` tool, if a user specifies a nodepool name forward it as the `filterNodepool` param to the `list_operations` tool. Provide a human readable explanation of the last operation status.
 
+## GCE VM instance serial logs
+
+### Objective
+
+To fetch serial logs of a GCE VM
+
+### Instructions
+
+1. **Get serial logs**: You will use the `get_serial_port_output` tool to get the serial logs of an instance. If the user doesn't provide the parameter `instance` then ask for it.
+
 ## GKE Cluster Known Issues
 
 ### Objective

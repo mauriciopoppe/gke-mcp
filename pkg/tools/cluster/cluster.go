@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"cloud.google.com/go/compute/apiv1"
+	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	container "cloud.google.com/go/container/apiv1"
 	containerpb "cloud.google.com/go/container/apiv1/containerpb"
 	"github.com/GoogleCloudPlatform/gke-mcp/pkg/config"
@@ -29,8 +31,9 @@ import (
 )
 
 type handlers struct {
-	c        *config.Config
-	cmClient *container.ClusterManagerClient
+	c         *config.Config
+	cmClient  *container.ClusterManagerClient
+	gceClient *compute.InstancesClient
 }
 
 func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
@@ -39,9 +42,15 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 		return fmt.Errorf("failed to create cluster manager client: %w", err)
 	}
 
+	gceClient, err := compute.NewInstancesRESTClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create gce client: %w", err)
+	}
+
 	h := &handlers{
-		c:        c,
-		cmClient: cmClient,
+		c:         c,
+		cmClient:  cmClient,
+		gceClient: gceClient,
 	}
 
 	listClustersTool := mcp.NewTool("list_clusters",
@@ -75,7 +84,44 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(listOperationsTool, h.listOperations)
 
+	getSerialPortOutputTool := mcp.NewTool("get_serial_port_output",
+		mcp.WithDescription("Get the serial port output from a GCE instance. Prefer to use this tool instead of gcloud"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID.")),
+		mcp.WithString("zone", mcp.Required(), mcp.Description("GCE instance zone.")),
+		mcp.WithString("instance", mcp.Required(), mcp.Description("GCE instance name.")),
+	)
+	s.AddTool(getSerialPortOutputTool, h.getSerialPortOutput)
+
 	return nil
+}
+
+func (h *handlers) getSerialPortOutput(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID, err := request.RequireString("project_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	zone, err := request.RequireString("zone")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	instance, err := request.RequireString("instance")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	req := &computepb.GetSerialPortOutputInstanceRequest{
+		Project:  projectID,
+		Zone:     zone,
+		Instance: instance,
+	}
+	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(resp.GetContents()), nil
 }
 
 func (h *handlers) listClusters(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
