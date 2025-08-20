@@ -179,6 +179,17 @@ To fetch serial logs of a GCE VM
 
 1. **Get serial logs**: You will use the `get_serial_port_output` tool to get the serial logs of an instance. If the user doesn't provide the parameter `instance` then ask for it.
 
+## GKE Node registration issues
+
+### Objective
+
+To identify if there are node registration issues in a GKE node
+
+### Instructions
+
+1. **Get a node registration logs**: You will use the `node_registration_logs` tool to get node registration checker logs. If the user doesn't provide the parameter `instance` then ask for it.
+1. **Identify node registration issues**: After using the tool `node_registration_logs` identify if there's a node registration issue. If the user doesn't provide the parameter `instance` then ask for it.
+
 ## GKE Cluster Known Issues
 
 ### Objective

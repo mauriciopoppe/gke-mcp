@@ -16,10 +16,11 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"cloud.google.com/go/compute/apiv1"
+	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	container "cloud.google.com/go/container/apiv1"
 	containerpb "cloud.google.com/go/container/apiv1/containerpb"
@@ -94,6 +95,16 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(getSerialPortOutputTool, h.getSerialPortOutput)
 
+	nodeRegistrationLogs := mcp.NewTool("node_registration_logs",
+		mcp.WithDescription("Gets node registration logs from a GKE node serial output"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID.")),
+		mcp.WithString("zone", mcp.Required(), mcp.Description("GCE instance zone.")),
+		mcp.WithString("instance", mcp.Required(), mcp.Description("GCE instance name.")),
+	)
+	s.AddTool(nodeRegistrationLogs, h.getNodeRegistrationLogs)
+
 	return nil
 }
 
@@ -122,6 +133,48 @@ func (h *handlers) getSerialPortOutput(ctx context.Context, request mcp.CallTool
 	}
 
 	return mcp.NewToolResultText(resp.GetContents()), nil
+}
+
+func (h *handlers) getNodeRegistrationLogs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID, err := request.RequireString("project_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	zone, err := request.RequireString("zone")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	instance, err := request.RequireString("instance")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	req := &computepb.GetSerialPortOutputInstanceRequest{
+		Project:  projectID,
+		Zone:     zone,
+		Instance: instance,
+	}
+	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	filteredLogs := []string{}
+	for _, logEntry := range strings.Split(strings.TrimSpace(resp.GetContents()), "\n") {
+		if strings.Contains(logEntry, "node-registration-checker.sh") {
+			filteredLogs = append(filteredLogs, logEntry)
+		}
+	}
+
+	if len(filteredLogs) > 0 {
+		output, err := json.MarshalIndent(filteredLogs, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(output)), nil
+	}
+
+	return mcp.NewToolResultText("There are no node-registration-checker.sh logs, this might signal a problem in the VM boot process."), nil
 }
 
 func (h *handlers) listClusters(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
