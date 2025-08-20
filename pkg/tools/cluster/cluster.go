@@ -242,7 +242,7 @@ func (h *handlers) getConfigureHelperLogs(ctx context.Context, request mcp.CallT
 
 	var resultBuilder strings.Builder
 	if foundPattern {
-		resultBuilder.WriteString("The node health checker was unable to confirm if the node is ready\n")
+		resultBuilder.WriteString("The node registration checker was unable to confirm if the node is ready\n")
 	}
 
 	if len(filteredLogs) > 0 {
