@@ -17,6 +17,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	container "cloud.google.com/go/container/apiv1"
 	containerpb "cloud.google.com/go/container/apiv1/containerpb"
@@ -33,7 +34,6 @@ type handlers struct {
 }
 
 func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
-
 	cmClient, err := container.NewClusterManagerClient(ctx, option.WithUserAgent(c.UserAgent()))
 	if err != nil {
 		return fmt.Errorf("failed to create cluster manager client: %w", err)
@@ -62,6 +62,18 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 		mcp.WithString("name", mcp.Required(), mcp.Description("GKE cluster name. Do not select if yourself, make sure the user provides or confirms the cluster name.")),
 	)
 	s.AddTool(getClusterTool, h.getCluster)
+
+	listOperationsTool := mcp.NewTool("list_operations",
+		mcp.WithDescription("List GKE cluster operations. Prefer to use this tool instead of gcloud"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.DefaultString(c.DefaultProjectID()), mcp.Description("GCP project ID. Use the default if the user doesn't provide it.")),
+		mcp.WithString("location", mcp.Description("GKE cluster location. Leave this empty if the user doesn't provide it.")),
+		mcp.WithString("filter", mcp.Description("Filter expression for client side filtering of the listing operations. Leave this empty if the user doesn't provide it")),
+		mcp.WithString("filterCluster", mcp.Description("Filter expression for when a cluster name is given for client side filtering of the listing operations. Leave this empty if the user doesn't provide it")),
+		mcp.WithString("filterNodepool", mcp.Description("Filter expression for when a nodepool name is given for client side filtering of the listing operations. Leave this empty if the user doesn't provide it")),
+	)
+	s.AddTool(listOperationsTool, h.listOperations)
 
 	return nil
 }
@@ -104,6 +116,48 @@ func (h *handlers) getCluster(ctx context.Context, request mcp.CallToolRequest) 
 	resp, err := h.cmClient.GetCluster(ctx, req)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(protojson.Format(resp)), nil
+}
+
+func (h *handlers) listOperations(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID := request.GetString("project_id", h.c.DefaultProjectID())
+	location, _ := request.RequireString("location")
+	if location == "" {
+		location = "-"
+	}
+
+	req := &containerpb.ListOperationsRequest{
+		Parent: fmt.Sprintf("projects/%s/locations/%s", projectID, location),
+	}
+	resp, err := h.cmClient.ListOperations(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	rawFilter, _ := request.RequireString("filter")
+	rawClusterFilter, _ := request.RequireString("filterCluster")
+	rawNodepoolFilter, _ := request.RequireString("filterNodepool")
+
+	filter := ""
+	if rawFilter != "" {
+		filter = rawFilter
+	} else if rawClusterFilter != "" {
+		filter = fmt.Sprintf("clusters/%s", rawClusterFilter)
+	} else if rawClusterFilter != "" {
+		filter = fmt.Sprintf("nodePools/%s", rawNodepoolFilter)
+	}
+
+	fmt.Printf("Filter was %q\n", filter)
+	if filter != "" {
+		var filteredOps []*containerpb.Operation
+		for _, op := range resp.Operations {
+			if strings.Contains(op.TargetLink, filter) {
+				filteredOps = append(filteredOps, op)
+			}
+		}
+		resp.Operations = filteredOps
 	}
 
 	return mcp.NewToolResultText(protojson.Format(resp)), nil

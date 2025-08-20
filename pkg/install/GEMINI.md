@@ -157,6 +157,18 @@ gcloud alpha container ai profiles manifests create --model=Gemma-3-27B --target
 gcloud container clusters list
 ```
 
+## GKE Cluster Operation Details
+
+### Objective
+
+To determine details about a cluster operation such as `create_cluster`, `create_nodepool`, etc by using the `list_operations` tool in this extension.
+
+### Instructions
+
+1. **Explain last operation details**: You will use the `list_operations` query and provide a human readable explanation of the last operation status.
+2. **Explain single cluster last operation details**: You will use the `list_operations` tool, if a user specifies a cluster name forward it as the `filterCluster` param to the `list_operations` tool. Provide a human readable explanation of the last operation status.
+2. **Explain single nodePool last operation details**: You will use the `list_operations` tool, if a user specifies a nodepool name forward it as the `filterNodepool` param to the `list_operations` tool. Provide a human readable explanation of the last operation status.
+
 ## GKE Cluster Known Issues
 
 ### Objective
