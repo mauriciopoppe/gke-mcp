@@ -228,11 +228,21 @@ func (h *handlers) getConfigureHelperLogs(ctx context.Context, request mcp.CallT
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	contents := resp.GetContents()
 	filteredLogs := []string{}
-	for _, logEntry := range strings.Split(strings.TrimSpace(resp.GetContents()), "\n") {
+	foundPattern := false
+	for _, logEntry := range strings.Split(strings.TrimSpace(contents), "\n") {
 		if strings.Contains(logEntry, "configure.sh") || strings.Contains(logEntry, "configure-helper.sh") {
 			filteredLogs = append(filteredLogs, logEntry)
 		}
+		if !foundPattern && strings.Contains(logEntry, "Not able to confirm if the node is ready - Collecting information") {
+			foundPattern = true
+		}
+	}
+
+	var resultBuilder strings.Builder
+	if foundPattern {
+		resultBuilder.WriteString("The node health checker was unable to confirm if the node is ready\n")
 	}
 
 	if len(filteredLogs) > 0 {
@@ -240,7 +250,11 @@ func (h *handlers) getConfigureHelperLogs(ctx context.Context, request mcp.CallT
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return mcp.NewToolResultText(string(output)), nil
+		resultBuilder.Write(output)
+	}
+
+	if resultBuilder.Len() > 0 {
+		return mcp.NewToolResultText(resultBuilder.String()), nil
 	}
 
 	return mcp.NewToolResultText("There are no configure.sh logs, this might signal a problem in the VM boot process."), nil
