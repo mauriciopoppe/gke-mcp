@@ -105,6 +105,16 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(nodeRegistrationLogs, h.getNodeRegistrationLogs)
 
+	kubeletLogs := mcp.NewTool("kubelet_logs",
+		mcp.WithDescription("Gets kubelet logs from a GKE node serial output"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID.")),
+		mcp.WithString("zone", mcp.Required(), mcp.Description("GCE instance zone.")),
+		mcp.WithString("instance", mcp.Required(), mcp.Description("GCE instance name.")),
+	)
+	s.AddTool(kubeletLogs, h.getKubeletLogs)
+
 	return nil
 }
 
@@ -121,7 +131,6 @@ func (h *handlers) getSerialPortOutput(ctx context.Context, request mcp.CallTool
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-
 	req := &computepb.GetSerialPortOutputInstanceRequest{
 		Project:  projectID,
 		Zone:     zone,
@@ -175,6 +184,50 @@ func (h *handlers) getNodeRegistrationLogs(ctx context.Context, request mcp.Call
 	}
 
 	return mcp.NewToolResultText("There are no node-registration-checker.sh logs, this might signal a problem in the VM boot process."), nil
+}
+
+func (h *handlers) getKubeletLogs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID, err := request.RequireString("project_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	zone, err := request.RequireString("zone")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	instance, err := request.RequireString("instance")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	var portI32 int32 = int32(3)
+	req := &computepb.GetSerialPortOutputInstanceRequest{
+		Project:  projectID,
+		Zone:     zone,
+		Instance: instance,
+		Port:     &portI32,
+	}
+	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	filteredLogs := []string{}
+	for _, logEntry := range strings.Split(strings.TrimSpace(resp.GetContents()), "\n") {
+		if strings.Contains(logEntry, "kubelet[") {
+			filteredLogs = append(filteredLogs, logEntry)
+		}
+	}
+
+	if len(filteredLogs) > 0 {
+		output, err := json.MarshalIndent(filteredLogs, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(output)), nil
+	}
+
+	return mcp.NewToolResultText("There are no kubelet logs, this might signal a problem in the VM boot process."), nil
 }
 
 func (h *handlers) listClusters(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

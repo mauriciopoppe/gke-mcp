@@ -187,8 +187,9 @@ To identify if there are node registration issues in a GKE node
 
 ### Instructions
 
-1. **Get a node registration logs**: You will use the `node_registration_logs` tool to get node registration checker logs. If the user doesn't provide the parameter `instance` then ask for it.
-1. **Identify node registration issues**: After using the tool `node_registration_logs` identify if there's a node registration issue. If the user doesn't provide the parameter `instance` then ask for it.
+1. **Get node registration logs**: You will use the `node_registration_logs` tool to get node registration checker logs. If the user doesn't provide the parameter `instance` then ask for it.
+1. **Get node kubelet logs**: You will use the `kubelet_logs` tool to get node kubelet logs. If the user doesn't provide the parameter `instance` then ask for it.
+1. **Identify node registration issues**: Use the tool `node_registration_logs` to identify if there's a node registration issue, also use the tool `kubelet_logs` to identify if there issues in the kubelet startup. If the user doesn't provide the parameter `instance` then ask for it.
 
 ## GKE Cluster Known Issues
 
