@@ -27,6 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/gke-mcp/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -35,6 +36,7 @@ type handlers struct {
 	c         *config.Config
 	cmClient  *container.ClusterManagerClient
 	gceClient *compute.InstancesClient
+	igmClient *compute.InstanceGroupManagersClient
 }
 
 func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
@@ -48,10 +50,16 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 		return fmt.Errorf("failed to create gce client: %w", err)
 	}
 
+	igmClient, err := compute.NewInstanceGroupManagersRESTClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create instance group manager client: %w", err)
+	}
+
 	h := &handlers{
 		c:         c,
 		cmClient:  cmClient,
 		gceClient: gceClient,
+		igmClient: igmClient,
 	}
 
 	listClustersTool := mcp.NewTool("list_clusters",
@@ -136,7 +144,73 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(describeNodePoolTool, h.describeNodePool)
 
-	return nil
+  getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
+		mcp.WithDescription("Get the instances controlled by a nodepool"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.DefaultString(c.DefaultProjectID()), mcp.Description("GCP project ID. Use the default if the user doesn't provide it.")),
+		mcp.WithString("location", mcp.Required(), mcp.Description("GKE cluster location.")),
+		mcp.WithString("cluster_name", mcp.Required(), mcp.Description("GKE cluster name.")),
+		mcp.WithString("nodepool_name", mcp.Required(), mcp.Description("GKE nodepool name.")),
+	)
+	s.AddTool(getNodePoolInstancesTool, h.getNodePoolInstances)
+
+  return nil
+}
+
+func (h *handlers) getNodePoolInstances(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID := request.GetString("project_id", h.c.DefaultProjectID())
+	location, err := request.RequireString("location")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	clusterName, err := request.RequireString("cluster_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	nodepoolName, err := request.RequireString("nodepool_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	req := &containerpb.GetNodePoolRequest{
+		Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s", projectID, location, clusterName, nodepoolName),
+	}
+	nodePool, err := h.cmClient.GetNodePool(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	var instances []*computepb.ManagedInstance
+	for _, url := range nodePool.InstanceGroupUrls {
+		parts := strings.Split(url, "/")
+		zone := parts[8]
+		igmName := parts[10]
+
+		listReq := &computepb.ListManagedInstancesInstanceGroupManagersRequest{
+			Project:              projectID,
+			Zone:                 zone,
+			InstanceGroupManager: igmName,
+		}
+
+		it := h.igmClient.ListManagedInstances(ctx, listReq)
+		for {
+			instance, err := it.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			instances = append(instances, instance)
+		}
+	}
+
+	output, err := json.MarshalIndent(instances, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return mcp.NewToolResultText(string(output)), nil
 }
 
 func (h *handlers) getConfigureHelperLogs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
