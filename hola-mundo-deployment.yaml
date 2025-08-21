@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hola-mundo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hola-mundo
+  template:
+    metadata:
+      labels:
+        app: hola-mundo
+    spec:
+      containers:
+      - name: hola-mundo-container
+        image: ealen/echo-server
+        ports:
+        - containerPort: 80
+        env:
+        - name: ECHOSERVER_TEXT
+          value: "Hola Mundo"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hola-mundo-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: hola-mundo
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
