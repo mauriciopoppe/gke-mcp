@@ -123,16 +123,6 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(kubeletLogs, h.getKubeletLogs)
 
-	checkKubeletErrorsTool := mcp.NewTool("check_kubelet_errors",
-		mcp.WithDescription("Checks for known errors in kubelet logs"),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithIdempotentHintAnnotation(true),
-		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID.")),
-		mcp.WithString("zone", mcp.Required(), mcp.Description("GCE instance zone.")),
-		mcp.WithString("instance", mcp.Required(), mcp.Description("GCE instance name.")),
-	)
-	s.AddTool(checkKubeletErrorsTool, h.checkKubeletErrors)
-
 	configureHelperLogs := mcp.NewTool("configure_helper_logs",
 		mcp.WithDescription("Gets configure helper logs from a GKE node serial output"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -373,43 +363,6 @@ func (h *handlers) getKubeletLogs(ctx context.Context, request mcp.CallToolReque
 	}
 
 	return mcp.NewToolResultText("There are no kubelet logs, this might signal a problem in the VM boot process."), nil
-}
-
-func (h *handlers) checkKubeletErrors(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	projectID, err := request.RequireString("project_id")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	zone, err := request.RequireString("zone")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	instance, err := request.RequireString("instance")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	contents, err := h.getSerialPortLogs(ctx, projectID, zone, instance, 3)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	knownErrors := map[string]string{
-		"failed to open any tpm device": "TPM device not found. This can happen on nodes that do not have a Trusted Platform Module.",
-	}
-
-	var resultBuilder strings.Builder
-	for pattern, errorMessage := range knownErrors {
-		if strings.Contains(contents, pattern) {
-			resultBuilder.WriteString(fmt.Sprintf("%s\n", errorMessage))
-		}
-	}
-
-	if resultBuilder.Len() > 0 {
-		return mcp.NewToolResultText(resultBuilder.String()), nil
-	}
-
-	return mcp.NewToolResultText("No known errors found in kubelet logs."), nil
 }
 
 func (h *handlers) getSerialPortLogs(ctx context.Context, projectID, zone, instance string, port int32) (string, error) {
