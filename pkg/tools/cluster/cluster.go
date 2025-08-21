@@ -315,15 +315,19 @@ func (h *handlers) getKubeletLogs(ctx context.Context, request mcp.CallToolReque
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	var resultBuilder strings.Builder
+	filteredLogs := []string{}
 	for _, logEntry := range strings.Split(strings.TrimSpace(contents), "\n") {
 		if strings.Contains(logEntry, "kubelet[") {
-			resultBuilder.WriteString(logEntry)
+			filteredLogs = append(filteredLogs, logEntry)
 		}
 	}
 
-	if resultBuilder.Len() > 0 {
-		return mcp.NewToolResultText(resultBuilder.String()), nil
+	if len(filteredLogs) > 0 {
+		output, err := json.MarshalIndent(filteredLogs, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(string(output)), nil
 	}
 
 	return mcp.NewToolResultText("There are no kubelet logs, this might signal a problem in the VM boot process."), nil
