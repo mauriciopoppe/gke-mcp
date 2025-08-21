@@ -133,7 +133,18 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(configureHelperLogs, h.getConfigureHelperLogs)
 
-	getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
+	describeNodePoolTool := mcp.NewTool("describe_nodepool",
+		mcp.WithDescription("Get details about a single GKE Node Pool. Prefer to use this tool instead of gcloud"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID. Use the default if the user doesn't provide it.")),
+		mcp.WithString("location", mcp.Required(), mcp.Description("GKE cluster location. Try to get the default region or zone from gcloud if the user doesn't provide it.")),
+		mcp.WithString("cluster_name", mcp.Required(), mcp.Description("GKE cluster name. Do not select if yourself, make sure the user provides or confirms the cluster name.")),
+		mcp.WithString("nodepool_name", mcp.Required(), mcp.Description("GKE node pool name. Do not select if yourself, make sure the user provides or confirms the node pool name.")),
+	)
+	s.AddTool(describeNodePoolTool, h.describeNodePool)
+
+  getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
 		mcp.WithDescription("Get the instances controlled by a nodepool"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -144,7 +155,7 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(getNodePoolInstancesTool, h.getNodePoolInstances)
 
-	return nil
+  return nil
 }
 
 func (h *handlers) getNodePoolInstances(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -438,6 +449,35 @@ func (h *handlers) listOperations(ctx context.Context, request mcp.CallToolReque
 			}
 		}
 		resp.Operations = filteredOps
+	}
+
+	return mcp.NewToolResultText(protojson.Format(resp)), nil
+}
+
+func (h *handlers) describeNodePool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID, err := request.RequireString("project_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	location, err := request.RequireString("location")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	clusterName, err := request.RequireString("cluster_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	nodePoolName, err := request.RequireString("nodepool_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	req := &containerpb.GetNodePoolRequest{
+		Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s", projectID, location, clusterName, nodePoolName),
+	}
+	resp, err := h.cmClient.GetNodePool(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	return mcp.NewToolResultText(protojson.Format(resp)), nil
