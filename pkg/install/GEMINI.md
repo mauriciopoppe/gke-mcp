@@ -205,12 +205,19 @@ To identify if there are node registration issues in a GKE node or a nodepool.
 
  ### Known errors in kubelet logs
 
-1. **Check for known errors in logs**: Use the `kubelet_logs` tool to scan for a list of known errors. If the user doesn't provide the `instance` parameter, be sure to ask for it.
+1.  **Check for known errors in logs**: Use the `kubelet_logs` tool to scan for a list of known errors. If the user doesn't provide the `instance` parameter, be sure to ask for it.
+  - Some of the errors to look for include:
+    - "failed to open any tpm device"
 
-   Some of the errors to look for include:
-   - "failed to open any tpm device"
+2.  If any errors are found, display them to the user and suggest possible troubleshooting steps.
 
-2. If any errors are found, display them to the user and suggest possible troubleshooting steps.
+### Known errors in node registration checker
+
+1.  **Check for known errors in logs**: Use the `node_registration_logs` tool to scan for a list of known errors. If the user doesn't provide the `instance` parameter, be sure to ask for it.
+  - Some of the errors to look for include:
+    - "Not able to confirm if the node is ready - Collecting information"
+
+2.  If any errors are found, display them to the user and suggest possible troubleshooting steps.
 
 ## GKE Cluster Known Issues
 

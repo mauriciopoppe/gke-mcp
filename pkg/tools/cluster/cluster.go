@@ -133,16 +133,6 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(configureHelperLogs, h.getConfigureHelperLogs)
 
-	checkConfigureHelperErrorsTool := mcp.NewTool("check_node_registration_checker_errors",
-		mcp.WithDescription("Checks for known errors in configure helper logs"),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithIdempotentHintAnnotation(true),
-		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID.")),
-		mcp.WithString("zone", mcp.Required(), mcp.Description("GCE instance zone.")),
-		mcp.WithString("instance", mcp.Required(), mcp.Description("GCE instance name.")),
-	)
-	s.AddTool(checkConfigureHelperErrorsTool, h.checkNodeRegistrationCheckerErrors)
-
 	getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
 		mcp.WithDescription("Get the instances controlled by a nodepool"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -247,32 +237,6 @@ func (h *handlers) getConfigureHelperLogs(ctx context.Context, request mcp.CallT
 	}
 
 	return mcp.NewToolResultText("There are no configure.sh logs, this might signal a problem in the VM boot process."), nil
-}
-
-func (h *handlers) checkNodeRegistrationCheckerErrors(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	projectID, err := request.RequireString("project_id")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	zone, err := request.RequireString("zone")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-	instance, err := request.RequireString("instance")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	contents, err := h.getSerialPortLogs(ctx, projectID, zone, instance, 3)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	if strings.Contains(contents, "Not able to confirm if the node is ready - Collecting information") {
-		return mcp.NewToolResultText("The node registration checker was unable to confirm if the node is ready"), nil
-	}
-
-	return mcp.NewToolResultText("No known errors found in configure helper logs."), nil
 }
 
 func (h *handlers) getSerialPortOutput(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
