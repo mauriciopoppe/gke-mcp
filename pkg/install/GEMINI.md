@@ -173,11 +173,12 @@ To determine details about a cluster operation such as `create_cluster`, `create
 
 ### Objective
 
-Determins details about GKE nodepools belonging to a GKE cluster.
+Gets details about GKE nodepools belonging to a GKE cluster.
 
 ### Instructions
 
 1. **Get nodepool instances**: You will use the `get_nodepool_instances` tool to get information about a nodepool instances. If the user doesn't provide the `nodepool` and `cluster` parameters then ask for it.
+1. **Describe nodepool managed instance group (or MIG for short)**: You will use the `describe_nodepool_mig` tool to get information about the MIG behind a nodepool. Some important properties are `status.isStable` which describes if the MIG is stable and `targetSize``status.isStable` and `targetSize`. If the user doesn't provide the `nodepool` and `cluster` parameters then ask for it. 
 
 ## GCE VM instance serial logs
 
@@ -197,12 +198,11 @@ To identify if there are node registration issues in a GKE node or a nodepool.
 
 ### Instructions
 
-1. **Describe nodepool MIGs**: You will use the `describe_nodepool_mig` tool to get the status of the MIGs. If the user doesn't provide the `nodepool` and `cluster` parameters then ask for it. If the MIGs are stable, then the issue is likely not on the GCE side.
-2. **Get node registration logs**: You will use the `node_registration_logs` tool to get node registration checker logs. If the user doesn't provide the parameter `instance` then ask for it.
-3. **Get node kubelet logs**: You will use the `kubelet_logs` tool to get node kubelet logs. If the user doesn't provide the parameter `instance` then ask for it.
-4. **Get configure helper logs**: You will use the `configure_helper_logs` tool to get node configure helper logs. If the user doesn't provide the parameter `instance` then ask for it.
-5. **Identify node registration issues**: Use the tool `configure_helper_logs` to identify if there's a configure issue, also use the tool `node_registration_logs` to identify if there's a node registration issue, also use the tool `kubelet_logs` to identify if there issues in the kubelet startup. If the user doesn't provide the parameter `instance` then ask for it.
-6. **Identify nodepool registration issues**: Use the tool `get_nodepool_instances` to get the nodepool instances, and then for every instance identify node registration issues.
+1. **Identify nodepool registration issues**: First describe the nodepool MIG and identify if it's stable, if it's not stable then use the tool `get_nodepool_instances` to get the nodepool instances, and then for every instance identify node registration issues.
+1. **Identify node registration issues**: Use the tool `configure_helper_logs` to identify if there's a configure issue, also use the tool `node_registration_logs` to identify if there's a node registration issue, also use the tool `kubelet_logs` to identify if there issues in the kubelet startup. If the user doesn't provide the parameter `instance` then ask for it.
+1. **Get node registration logs**: You will use the `node_registration_logs` tool to get node registration checker logs. If the user doesn't provide the parameter `instance` then ask for it.
+1. **Get node kubelet logs**: You will use the `kubelet_logs` tool to get node kubelet logs. If the user doesn't provide the parameter `instance` then ask for it.
+1. **Get configure helper logs**: You will use the `configure_helper_logs` tool to get node configure helper logs. If the user doesn't provide the parameter `instance` then ask for it.
 
  ### Known errors in kubelet logs
 
