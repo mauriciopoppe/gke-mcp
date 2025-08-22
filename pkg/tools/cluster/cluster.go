@@ -166,7 +166,7 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	s.AddTool(listMigsTool, h.listMigs)
 
 	describeNodePoolMigTool := mcp.NewTool("describe_nodepool_mig",
-		mcp.WithDescription("Get the status of the Managed Instance Groups (MIGs) for a specific GKE Node Pool."),
+		mcp.WithDescription("Describes the Managed Instance Groups (MIGs) for a specific GKE Node Pool."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID. Use the default if the user doesn't provide it.")),
