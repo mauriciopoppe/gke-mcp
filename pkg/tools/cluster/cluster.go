@@ -144,7 +144,7 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(describeNodePoolTool, h.describeNodePool)
 
-	getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
+  getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
 		mcp.WithDescription("Get the instances controlled by a nodepool"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -331,20 +331,13 @@ func (h *handlers) getConfigureHelperLogs(ctx context.Context, request mcp.CallT
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	var portI32 int32 = int32(3)
-	req := &computepb.GetSerialPortOutputInstanceRequest{
-		Project:  projectID,
-		Zone:     zone,
-		Instance: instance,
-		Port:     &portI32,
-	}
-	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	contents, err := h.getSerialPortLogs(ctx, projectID, zone, instance, 3)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	filteredLogs := []string{}
-	for _, logEntry := range strings.Split(strings.TrimSpace(resp.GetContents()), "\n") {
+	for _, logEntry := range strings.Split(strings.TrimSpace(contents), "\n") {
 		if strings.Contains(logEntry, "configure.sh") || strings.Contains(logEntry, "configure-helper.sh") {
 			filteredLogs = append(filteredLogs, logEntry)
 		}
@@ -374,17 +367,11 @@ func (h *handlers) getSerialPortOutput(ctx context.Context, request mcp.CallTool
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	req := &computepb.GetSerialPortOutputInstanceRequest{
-		Project:  projectID,
-		Zone:     zone,
-		Instance: instance,
-	}
-	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	contents, err := h.getSerialPortLogs(ctx, projectID, zone, instance, 1)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-
-	return mcp.NewToolResultText(resp.GetContents()), nil
+	return mcp.NewToolResultText(contents), nil
 }
 
 func (h *handlers) getNodeRegistrationLogs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -401,18 +388,13 @@ func (h *handlers) getNodeRegistrationLogs(ctx context.Context, request mcp.Call
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	req := &computepb.GetSerialPortOutputInstanceRequest{
-		Project:  projectID,
-		Zone:     zone,
-		Instance: instance,
-	}
-	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	contents, err := h.getSerialPortLogs(ctx, projectID, zone, instance, 1)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	filteredLogs := []string{}
-	for _, logEntry := range strings.Split(strings.TrimSpace(resp.GetContents()), "\n") {
+	for _, logEntry := range strings.Split(strings.TrimSpace(contents), "\n") {
 		if strings.Contains(logEntry, "node-registration-checker.sh") {
 			filteredLogs = append(filteredLogs, logEntry)
 		}
@@ -443,20 +425,13 @@ func (h *handlers) getKubeletLogs(ctx context.Context, request mcp.CallToolReque
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	var portI32 int32 = int32(3)
-	req := &computepb.GetSerialPortOutputInstanceRequest{
-		Project:  projectID,
-		Zone:     zone,
-		Instance: instance,
-		Port:     &portI32,
-	}
-	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	contents, err := h.getSerialPortLogs(ctx, projectID, zone, instance, 3)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	filteredLogs := []string{}
-	for _, logEntry := range strings.Split(strings.TrimSpace(resp.GetContents()), "\n") {
+	for _, logEntry := range strings.Split(strings.TrimSpace(contents), "\n") {
 		if strings.Contains(logEntry, "kubelet[") {
 			filteredLogs = append(filteredLogs, logEntry)
 		}
@@ -471,6 +446,20 @@ func (h *handlers) getKubeletLogs(ctx context.Context, request mcp.CallToolReque
 	}
 
 	return mcp.NewToolResultText("There are no kubelet logs, this might signal a problem in the VM boot process."), nil
+}
+
+func (h *handlers) getSerialPortLogs(ctx context.Context, projectID, zone, instance string, port int32) (string, error) {
+	req := &computepb.GetSerialPortOutputInstanceRequest{
+		Project:  projectID,
+		Zone:     zone,
+		Instance: instance,
+		Port:     &port,
+	}
+	resp, err := h.gceClient.GetSerialPortOutput(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return resp.GetContents(), nil
 }
 
 func (h *handlers) listClusters(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

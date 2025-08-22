@@ -204,6 +204,22 @@ To identify if there are node registration issues in a GKE node or a nodepool.
 5. **Identify node registration issues**: Use the tool `configure_helper_logs` to identify if there's a configure issue, also use the tool `node_registration_logs` to identify if there's a node registration issue, also use the tool `kubelet_logs` to identify if there issues in the kubelet startup. If the user doesn't provide the parameter `instance` then ask for it.
 6. **Identify nodepool registration issues**: Use the tool `get_nodepool_instances` to get the nodepool instances, and then for every instance identify node registration issues.
 
+ ### Known errors in kubelet logs
+
+1.  **Check for known errors in logs**: Use the `kubelet_logs` tool to scan for a list of known errors. If the user doesn't provide the `instance` parameter, be sure to ask for it.
+  - Some of the errors to look for include:
+    - "failed to open any tpm device"
+
+2.  If any errors are found, display them to the user and suggest possible troubleshooting steps.
+
+### Known errors in node registration checker
+
+1.  **Check for known errors in logs**: Use the `node_registration_logs` tool to scan for a list of known errors. If the user doesn't provide the `instance` parameter, be sure to ask for it.
+  - Some of the errors to look for include:
+    - "Not able to confirm if the node is ready - Collecting information"
+
+2.  If any errors are found, display them to the user and suggest possible troubleshooting steps.
+
 ## GKE Cluster Known Issues
 
 ### Objective
