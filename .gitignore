@@ -3,3 +3,6 @@ gke-mcp
 .gemini/
 # Added by goreleaser init:
 dist/
+
+# Automatically generated.
+bad-startup-script.sh

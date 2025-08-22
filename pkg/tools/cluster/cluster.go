@@ -20,10 +20,11 @@ import (
 	"fmt"
 	"strings"
 
-	compute "cloud.google.com/go/compute/apiv1"
+	computeapi "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	container "cloud.google.com/go/container/apiv1"
+	containerapi "cloud.google.com/go/container/apiv1"
 	containerpb "cloud.google.com/go/container/apiv1/containerpb"
+	"google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/gke-mcp/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -34,23 +35,23 @@ import (
 
 type handlers struct {
 	c         *config.Config
-	cmClient  *container.ClusterManagerClient
-	gceClient *compute.InstancesClient
-	igmClient *compute.InstanceGroupManagersClient
+	cmClient  *containerapi.ClusterManagerClient
+	gceClient *computeapi.InstancesClient
+	igmClient *computeapi.InstanceGroupManagersClient
 }
 
 func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
-	cmClient, err := container.NewClusterManagerClient(ctx, option.WithUserAgent(c.UserAgent()))
+	cmClient, err := containerapi.NewClusterManagerClient(ctx, option.WithUserAgent(c.UserAgent()))
 	if err != nil {
 		return fmt.Errorf("failed to create cluster manager client: %w", err)
 	}
 
-	gceClient, err := compute.NewInstancesRESTClient(ctx)
+	gceClient, err := computeapi.NewInstancesRESTClient(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create gce client: %w", err)
 	}
 
-	igmClient, err := compute.NewInstanceGroupManagersRESTClient(ctx)
+	igmClient, err := computeapi.NewInstanceGroupManagersRESTClient(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create instance group manager client: %w", err)
 	}
@@ -144,7 +145,7 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(describeNodePoolTool, h.describeNodePool)
 
-  getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
+	getNodePoolInstancesTool := mcp.NewTool("get_nodepool_instances",
 		mcp.WithDescription("Get the instances controlled by a nodepool"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -261,7 +262,7 @@ func (h *handlers) describeNodePoolMig(ctx context.Context, request mcp.CallTool
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get node pool: %v", err)), nil
 	}
 
-	var results []string
+	var results []*compute.InstanceGroupManager
 	for _, url := range nodePool.InstanceGroupUrls {
 		// The URL is in the format: https://www.googleapis.com/compute/v1/projects/PROJECT/zones/ZONE/instanceGroupManagers/MIG_NAME
 		parts := strings.Split(url, "/")
@@ -274,24 +275,27 @@ func (h *handlers) describeNodePoolMig(ctx context.Context, request mcp.CallTool
 		// Now, list MIGs in that zone and find the one we're interested in
 		migs, err := ListMigs(ctx, projectID, zone, fmt.Sprintf("name = %s", migName))
 		if err != nil {
-			results = append(results, fmt.Sprintf("%s in %s: Error - %v", migName, zone, err))
-			continue
+			return mcp.NewToolResultError(fmt.Sprintf("failed to list MIGs: %v", err)), nil
 		}
 
 		found := false
 		for _, mig := range migs {
 			if mig.Name == migName {
-				results = append(results, fmt.Sprintf("%s in %s: Stable=%t, Target Size=%d", mig.Name, zone, mig.IsStable, mig.TargetSize))
+				results = append(results, mig)
 				found = true
 				break
 			}
 		}
 		if !found {
-			results = append(results, fmt.Sprintf("%s in %s: Not Found", migName, zone))
+			return mcp.NewToolResultError(fmt.Sprintf("didn't find any MIGs: %v", err)), nil
 		}
 	}
 
-	return mcp.NewToolResultText(strings.Join(results, "\n")), nil
+	output, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return mcp.NewToolResultText(string(output)), nil
 }
 
 func (h *handlers) listMigs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

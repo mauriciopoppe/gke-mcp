@@ -8,21 +8,14 @@ import (
 	"google.golang.org/api/option"
 )
 
-// MIG represents a Managed Instance Group.
-type MIG struct {
-	Name       string `json:"name"`
-	IsStable   bool   `json:"isStable"`
-	TargetSize int64  `json:"targetSize"`
-}
-
 // ListMigs lists Managed Instance Groups in a project and location.
-func ListMigs(ctx context.Context, projectID, location, filter string) ([]MIG, error) {
+func ListMigs(ctx context.Context, projectID, location, filter string) ([]*compute.InstanceGroupManager, error) {
 	computeService, err := compute.NewService(ctx, option.WithUserAgent("gke-mcp-gemini-cli"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create compute service: %w", err)
 	}
 
-	var migs []MIG
+	var migs []*compute.InstanceGroupManager
 	// This is a simple way to differentiate between a zone and a region.
 	// A better way would be to use the locations API.
 	if len(location) > 2 && location[len(location)-2] == '-' { // Likely a zone
@@ -32,11 +25,7 @@ func ListMigs(ctx context.Context, projectID, location, filter string) ([]MIG, e
 		}
 		if err := req.Pages(ctx, func(page *compute.InstanceGroupManagerList) error {
 			for _, igm := range page.Items {
-				migs = append(migs, MIG{
-					Name:       igm.Name,
-					IsStable:   igm.Status.IsStable,
-					TargetSize: igm.TargetSize,
-				})
+				migs = append(migs, igm)
 			}
 			return nil
 		}); err != nil {
@@ -49,11 +38,7 @@ func ListMigs(ctx context.Context, projectID, location, filter string) ([]MIG, e
 		}
 		if err := req.Pages(ctx, func(page *compute.RegionInstanceGroupManagerList) error {
 			for _, igm := range page.Items {
-				migs = append(migs, MIG{
-					Name:       igm.Name,
-					IsStable:   igm.Status.IsStable,
-					TargetSize: igm.TargetSize,
-				})
+				migs = append(migs, igm)
 			}
 			return nil
 		}); err != nil {
