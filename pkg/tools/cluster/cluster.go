@@ -155,7 +155,28 @@ func Install(ctx context.Context, s *server.MCPServer, c *config.Config) error {
 	)
 	s.AddTool(getNodePoolInstancesTool, h.getNodePoolInstances)
 
-  return nil
+	listMigsTool := mcp.NewTool("list_migs",
+		mcp.WithDescription("List GKE Managed Instance Groups. Prefer to use this tool instead of gcloud"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID. Use the default if the user doesn't provide it.")),
+		mcp.WithString("location", mcp.Required(), mcp.Description("GKE cluster location. Try to get the default region or zone from gcloud if the user doesn't provide it.")),
+		mcp.WithString("filter", mcp.Description("Filter expression for client side filtering of the listing operations. Leave this empty if the user doesn't provide it")),
+	)
+	s.AddTool(listMigsTool, h.listMigs)
+
+	describeNodePoolMigTool := mcp.NewTool("describe_nodepool_mig",
+		mcp.WithDescription("Describes the Managed Instance Groups (MIGs) for a specific GKE Node Pool."),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("project_id", mcp.Required(), mcp.Description("GCP project ID. Use the default if the user doesn't provide it.")),
+		mcp.WithString("location", mcp.Required(), mcp.Description("GKE cluster location. Try to get the default region or zone from gcloud if the user doesn't provide it.")),
+		mcp.WithString("cluster_name", mcp.Required(), mcp.Description("GKE cluster name. Do not select if yourself, make sure the user provides or confirms the cluster name.")),
+		mcp.WithString("nodepool_name", mcp.Required(), mcp.Description("GKE node pool name. Do not select if yourself, make sure the user provides or confirms the node pool name.")),
+	)
+	s.AddTool(describeNodePoolMigTool, h.describeNodePoolMig)
+
+	return nil
 }
 
 func (h *handlers) getNodePoolInstances(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -207,6 +228,89 @@ func (h *handlers) getNodePoolInstances(ctx context.Context, request mcp.CallToo
 	}
 
 	output, err := json.MarshalIndent(instances, "", "  ")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return mcp.NewToolResultText(string(output)), nil
+}
+
+func (h *handlers) describeNodePoolMig(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID, err := request.RequireString("project_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	location, err := request.RequireString("location")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	clusterName, err := request.RequireString("cluster_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	nodePoolName, err := request.RequireString("nodepool_name")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// First, get the node pool details to find the instance group URLs
+	req := &containerpb.GetNodePoolRequest{
+		Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s", projectID, location, clusterName, nodePoolName),
+	}
+	nodePool, err := h.cmClient.GetNodePool(ctx, req)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get node pool: %v", err)), nil
+	}
+
+	var results []string
+	for _, url := range nodePool.InstanceGroupUrls {
+		// The URL is in the format: https://www.googleapis.com/compute/v1/projects/PROJECT/zones/ZONE/instanceGroupManagers/MIG_NAME
+		parts := strings.Split(url, "/")
+		if len(parts) < 11 {
+			continue // Invalid URL format
+		}
+		zone := parts[8]
+		migName := parts[10]
+
+		// Now, list MIGs in that zone and find the one we're interested in
+		migs, err := ListMigs(ctx, projectID, zone, fmt.Sprintf("name = %s", migName))
+		if err != nil {
+			results = append(results, fmt.Sprintf("%s in %s: Error - %v", migName, zone, err))
+			continue
+		}
+
+		found := false
+		for _, mig := range migs {
+			if mig.Name == migName {
+				results = append(results, fmt.Sprintf("%s in %s: Stable=%t, Target Size=%d", mig.Name, zone, mig.IsStable, mig.TargetSize))
+				found = true
+				break
+			}
+		}
+		if !found {
+			results = append(results, fmt.Sprintf("%s in %s: Not Found", migName, zone))
+		}
+	}
+
+	return mcp.NewToolResultText(strings.Join(results, "\n")), nil
+}
+
+func (h *handlers) listMigs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	projectID, err := request.RequireString("project_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	location, err := request.RequireString("location")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	filter, _ := request.RequireString("filter")
+
+	migs, err := ListMigs(ctx, projectID, location, filter)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	output, err := json.MarshalIndent(migs, "", "  ")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
